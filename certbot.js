@@ -37,5 +37,9 @@ var bot = controller.spawn(
 
 
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot,message) {
- bot.reply(message,"Hello.");
+  bot.reply(message,"Hello!");
 });
+
+controller.hears(['i love you'],'direct_message,direct_mention,mention',function(bot, message) {
+    bot.reply(message,"Aw, I love you too! :heart:")
+})
