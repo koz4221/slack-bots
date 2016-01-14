@@ -36,8 +36,8 @@ var bot = controller.spawn(
 ).startRTM();
 
 var booActivePoll = false;
-var results, options, pollChannel, pollUser;
-var resultsUsers = [];
+var options, pollChannel, pollUser;
+var results, resultsUsers = [];
 
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot,message) {
   bot.reply(message,"Hello!");
@@ -76,15 +76,19 @@ controller.hears('poll','direct_message,direct_mention',function(bot, message) {
             convo.ask('OK! Now what are the poll options? Comma-delimited list, please!', function(response,convo) {
               options = response.text.split(',');
               
-              var phrase = question;
+              var phrase = 'Hey <!channel>, it\'s poll time! ' + question;
               for (var i = 0; i < options.length; i++) {
                 phrase += '\n' + (i + 1) + '. ' + options[i];
               }
-              phrase += '\n' + 'Type "vote #" to submit your choice!'
+              phrase += '\n' + 'Type "vote #" to submit your choice! DM me to keep your choice private.'
               
               booActivePoll = true;
               pollChannel = message.channel;
               pollUser = message.user;
+              setTimeout(function() {
+                pollResults(message);
+              }, 300000);
+              
               convo.say(phrase);
               convo.next();
             });
@@ -93,8 +97,6 @@ controller.hears('poll','direct_message,direct_mention',function(bot, message) {
       ]);
     });    
   }
-  
-
 });
 
 controller.hears('vote','direct_message,direct_mention,mention,ambient',function(bot,message) {
@@ -118,21 +120,27 @@ controller.hears('vote','direct_message,direct_mention,mention,ambient',function
 });
 
 function pollResults(message) {
-  var phrase = 'Poll results!';
-  for (var i = 0; i < options.length; i++) {
-    phrase += '\n' + options[i] + ' - ' + ((results[i+1] !== undefined) ? results[i+1] : 0);
+  if (booActivePoll == true) {
+    var phrase = 'Poll results!';
+    for (var i = 0; i < options.length; i++) {
+      phrase += '\n' + options[i] + ' - ' + ((results !== undefined && results[i+1] !== undefined) ? results[i+1] : 0);
+    }
+    
+    bot.reply(message,phrase);
+
+    options = [];
+    results = [];
+    resultsUsers = [];
+    pollChannel, pollUser = {};
+    booActivePoll = false;      
   }
-  
-  bot.reply(message,phrase);
-  options = [];
-  results = [];
-  resultsUsers = [];
-  pollChannel, pollUser = {};
-  booActivePoll = false;  
 }
 
 controller.hears('debug','direct_message',function(bot, message) {
-  console.log(message);
+  bot.api.chat.postMessage({ channel:'C0HG8KG4D', text:'ohhh yeah'},function(err,response) {
+    if (err) { console.log(err); }
+  });
+
   bot.api.channels.info({ channel:'C0H8K3WES' },function(err,response) {
     if (err) { console.log(err); }
     //console.log(response);
