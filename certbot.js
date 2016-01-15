@@ -140,7 +140,16 @@ function pollResults(message) {
 }
 
 controller.hears('weather','direct_message,direct_mention',function(bot,message) {
-  http.get('http://api.aerisapi.com/places/closest?p=04101' + aerisString, function(response,err) {
+  var search;
+  var query = message.text.replace(/weather\s*/i,'');
+  if (query.length > 0) {
+    search = query;
+  }
+  else {
+    search = '04101';
+  }
+  console.log(search);
+  http.get('http://api.aerisapi.com/places/closest?p=' + search + aerisString, function(response,err) {
     if (err) { console.log(err); }
     // Continuously update stream with data
     var body = '';
@@ -149,26 +158,31 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
     });
     response.on('end', function() {
       var ret = JSON.parse(body);
-      var place = ret.response[0].place.name;
-      var state = ret.response[0].place.state;
-      var country = ret.response[0].place.country;
-      
-      var location = place + ' ' + ((state != '') ? state : country);
-      
-      // now actual weather lookup
-      http.get('http://api.aerisapi.com/observations/closest?p=04101' + aerisString, function(response,err) {
-       body = '';
-        response.on('data', function(d) {
-          body += d;
+      if (ret.success == false) {
+        bot.reply(message,'Error accessing data: ' + ret.error.description);
+      }
+      else {
+        var place = ret.response[0].place.name;
+        var state = ret.response[0].place.state;
+        var country = ret.response[0].place.country;
+        
+        var location = place + ' ' + ((state != '') ? state : country);
+        
+        // now actual weather lookup
+        http.get('http://api.aerisapi.com/observations/closest?p=' + search + aerisString, function(response,err) {
+         body = '';
+          response.on('data', function(d) {
+            body += d;
+          });
+          response.on('end', function() {
+            ret = JSON.parse(body);
+            var temp = ret.response[0].ob.tempF;
+            var weather = ret.response[0].ob.weatherShort;
+            
+            bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + '.');
+          });
         });
-        response.on('end', function() {
-          ret = JSON.parse(body);
-          var temp = ret.response[0].ob.tempF;
-          var weather = ret.response[0].ob.weatherShort;
-          
-          bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + '.');
-        });
-      });
+      }
     });
   });
 });
