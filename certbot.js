@@ -180,9 +180,10 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
             var weather = ret.response[0].ob.weatherShort;
             var windDir = ret.response[0].ob.windDir;
             var windMPH = ret.response[0].ob.windSpeedMPH;
+            var feelsLike = ret.response[0].ob.feelslikeF;
             
             bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + 
-              '. Wind is ' + windDir + ' at ' + windMPH + ' MPH.');
+              '. Wind is ' + windDir + ' at ' + windMPH + ' MPH and it feels like ' + feelsLike + '\xB0' + 'F.');
           });
         });
       }
