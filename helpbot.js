@@ -63,14 +63,13 @@ This bot demonstrates many of the core features of Botkit:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-/* Making a trivial change because github is being dumb */
 
 if (!process.env.token) {
     console.log('Error: Specify token in environment');
     process.exit(1);
 }
 
-var Botkit = require('./lib/Botkit.js');
+var Botkit = require('../lib/Botkit.js');
 var os = require('os');
 
 var controller = Botkit.slackbot({
@@ -85,74 +84,39 @@ var Storage = {
   users: {}
 };
 
-// look into:::
-// botkit.memory_store
-var x;
-bot.api.channels.info({id: 'C0H8QK0SV'},function(a,json){
-  console.log(json);
-});
-bot.api.users.list({},function(a,json){
-
-  json.members.forEach(function(user,i) {
-    if (!user.is_bot) {
-      Storage.users[user.id] = {
-        name:user.name,
-        first_name: user.profile.first_name,
-        last_name: user.profile.last_name,
-        real_name: user.profile.real_name,
-        real_name_normalized: user.profile.real_name_normalized,
-        email:user.profile.email
-      };
-    }
+function updateStorage() {
+  bot.api.users.list({},function(err,json){
+    Storage.users = json.members;
   });
-  Storage.users.raw = json.members;
-
-});
-
-controller.hears(['update storage'],'direct_message',function(bot,message) {
-  bot.api.users.list({},function(a,json){
-      json.members.forEach(function(user,i) {
-        if (!user.is_bot) {
-          Storage.users[user.id] = {
-            name:user.name,
-            first_name: user.profile.first_name,
-            last_name: user.profile.last_name,
-            real_name: user.profile.real_name,
-            real_name_normalized: user.profile.real_name_normalized,
-            email:user.profile.email
-          };
-        }
-      });
-    });
-});
-var insults = [
-  'you are a loser.',
-  'you\'re tacky and I hate you.',
-  'you have a very punchable face.',
-  'your presence offends me.'
-];
-var compliments = [
-  'you have great hair.',
-  'you\'re beautiful. Never change.',
-  'you have impeccable manners',
-  'on a scale of 1 to 10, you are an 11'
-];
-
-function getRandomArrayValue(arr) {
-  var index = Math.floor( Math.random() * (arr.length) );
-  console.log(index);
-  return arr[index];
 }
+
+
+var buildGetUser = function(prop) {
+  return function(val) {
+    return Storage.users.filter(function(user,i){
+      if (user[prop] == val){
+        console.log('found');
+        console.log('user');
+        return user;
+      }
+    })[0];
+  };
+};
+
+var getUserById = buildGetUser('id');
+// name here means their slack name e.g. "mike"
+var getUserByName = buildGetUser('name');
 
 var parseName = function(fullmsg) {
   // strip command
-  fullmsg.toString();
   var msg = '';
+  fullmsg.toString();
   msg = fullmsg.substr(fullmsg.indexOf(' ') + 1);
   msg = msg.indexOf(' ') > -1 ? msg.substr(0, ' ') : msg;
-  if (msg == 'me') {
+  if (msg == 'me' || msg.indexOf('@') < 0) {
     return msg;
   } else {
+    // strip angle brackets and @ from user name
     msg = msg.substr(2);
     msg = msg.substr(0, msg.length -1);
 
@@ -160,34 +124,54 @@ var parseName = function(fullmsg) {
   }
 
 };
-var getUserByName = function(name){
-  var currentUser = {};
-  // strip @ from name
-  name = name.indexOf('@') > -1 ? name.substr(1) : name;
 
-  Storage.users.raw.forEach(function(user,i){
-    //console.log(user.name);
-    if (user.name == name){
-      currentUser = user;
-      return;
-    }
-  });
+function getRandomArrayValue(arr) {
+  var index = Math.floor( Math.random() * (arr.length) );
+  console.log(index);
+  return arr[index];
+}
 
-  return currentUser;
-};
+var insults = [
+  'you are a ninny.',
+  'you\'re tacky and I hate you.',
+  'you have a very punchable face.',
+  'your presence offends me.',
+  'you smell like farts.',
+  'I was having a great day until I saw your face.',
+  'you\'re about as sharp as a bowling ball.',
+  'I bet you won most likely to drink out of the toilet in your high school class',
+  'you are the worst',
+  'I hear the only place you\'re ever invited is outside.'
+];
+var compliments = [
+  'you have great hair.',
+  'you\'re beautiful. Never change.',
+  'you have impeccable manners',
+  'on a scale of 1 to 10, you are an 11',
+  'You bring out the best in other people.',
+  'Everything would be better if more people were like you!',
+  'You\'re a candle in the darkness.',
+  'You\'re more fun than bubble wrap.',
+  'You\'re really something special.',
+  'You have all of the qualities I am looking for in a human host.'
+];
+
+updateStorage();
+
+controller.hears(['update storage'],'direct_message',function(bot,message) {
+  updateStorage();
+});
 
 controller.hears(['insult'],'direct_message,direct_mention,mention',function(bot,message) {
   //var person = Storage.users[message.user];
 
   var recipient;
-  var person;
-  if (parseName(message.text) == 'me') {
-    recipient = Storage.users[message.user].first_name;
-  } else if ( parseName(message.text) ) {
-    console.log(parseName(message.text));
-    person = Storage.users[parseName(message.text)];
-    console.log(person);
-    recipient = person.first_name;
+  var person = parseName(message.text);
+  console.log(person);
+  if (person == 'me') {
+    recipient = getUserById(message.user).profile.first_name;
+  } else if ( person ) {
+    recipient = getUserById(person).profile.first_name;
   } else {
     // fail if no recipient
     return;
@@ -196,15 +180,14 @@ controller.hears(['insult'],'direct_message,direct_mention,mention',function(bot
   bot.reply(message, recipient + ' ' + getRandomArrayValue(insults));
 });
 controller.hears(['compliment'],'direct_message,direct_mention,mention',function(bot,message) {
+  
   var recipient;
-  var person;
-  if (parseName(message.text) == 'me') {
-    recipient = Storage.users[message.user].first_name;
-  } else if ( parseName(message.text) ) {
-    console.log(parseName(message.text));
-    person = Storage.users[parseName(message.text)];
-    console.log(person);
-    recipient = person.first_name;
+  var person = parseName(message.text);
+
+  if (person == 'me') {
+    recipient = getUserById(message.user).first_name;
+  } else if ( person ) {
+    recipient = getUserById(person).first_name;
   } else {
     // fail if no recipient
     return;
@@ -227,29 +210,12 @@ controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function
         }
     });
 
-console.log(message);
     controller.storage.users.get(message.user,function(err, user) {
         if (user && user.name) {
             bot.reply(message,'Hello ' + user.name + '!!');
         } else {
             bot.reply(message,message);
         }
-    });
-});
-
-controller.hears(['call me (.*)'],'direct_message,direct_mention,mention',function(bot, message) {
-    var matches = message.text.match(/call me (.*)/i);
-    var name = matches[1];
-    controller.storage.users.get(message.user,function(err, user) {
-        if (!user) {
-            user = {
-                id: message.user,
-            };
-        }
-        user.name = name;
-        controller.storage.users.save(user,function(err, id) {
-            bot.reply(message,'Got it. I will call you ' + user.name + ' from now on.');
-        });
     });
 });
 
@@ -263,7 +229,6 @@ controller.hears(['what is my name','who am i'],'direct_message,direct_mention,m
         }
     });
 });
-
 
 controller.hears(['shutdown'],'direct_message,direct_mention,mention',function(bot, message) {
 
@@ -290,31 +255,3 @@ controller.hears(['shutdown'],'direct_message,direct_mention,mention',function(b
         ]);
     });
 });
-
-
-controller.hears(['uptime','identify yourself','who are you','what is your name'],'direct_message,direct_mention,mention',function(bot, message) {
-
-    var hostname = os.hostname();
-    var uptime = formatUptime(process.uptime());
-
-    bot.reply(message,':robot_face: I am a bot named <@' + bot.identity.name + '>. I have been running for ' + uptime + ' on ' + hostname + '.');
-
-});
-
-function formatUptime(uptime) {
-    var unit = 'second';
-    if (uptime > 60) {
-        uptime = uptime / 60;
-        unit = 'minute';
-    }
-    if (uptime > 60) {
-        uptime = uptime / 60;
-        unit = 'hour';
-    }
-    if (uptime != 1) {
-        unit = unit + 's';
-    }
-
-    uptime = uptime + ' ' + unit;
-    return uptime;
-}
