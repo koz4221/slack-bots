@@ -178,8 +178,11 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
             ret = JSON.parse(body);
             var temp = ret.response[0].ob.tempF;
             var weather = ret.response[0].ob.weatherShort;
+            var windDir = ret.response[0].ob.windDir;
+            var windMPH = ret.response[0].ob.windSpeedMPH;
             
-            bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + '.');
+            bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + 
+              '. Wind is ' + windDir + ' at ' + windMPH + ' MPH.');
           });
         });
       }
