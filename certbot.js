@@ -24,6 +24,7 @@ This is a sample Slack bot built with Botkit.
 
 var Botkit = require('./lib/Botkit.js');
 var os = require('os');
+var http = require('http');
 
 var controller = Botkit.slackbot({
   debug: false,
@@ -34,6 +35,8 @@ var bot = controller.spawn(
     token:process.env.token
   }
 ).startRTM();
+
+var aerisString = '&client_id=' + process.env.aerisID + '&client_secret=' + process.env.aerisSecret
 
 var booActivePoll = false;
 var options, pollChannel, pollUser;
@@ -135,6 +138,40 @@ function pollResults(message) {
     booActivePoll = false;      
   }
 }
+
+controller.hears('weather','direct_message,direct_mention',function(bot,message) {
+  http.get('http://api.aerisapi.com/places/closest?p=04101' + aerisString, function(response,err) {
+    if (err) { console.log(err); }
+    // Continuously update stream with data
+    var body = '';
+    response.on('data', function(d) {
+      body += d;
+    });
+    response.on('end', function() {
+      var ret = JSON.parse(body);
+      var place = ret.response[0].place.name;
+      var state = ret.response[0].place.state;
+      var country = ret.response[0].place.country;
+      
+      var location = place + ' ' + ((state != '') ? state : country);
+      
+      // now actual weather lookup
+      http.get('http://api.aerisapi.com/observations/closest?p=04101' + aerisString, function(response,err) {
+       body = '';
+        response.on('data', function(d) {
+          body += d;
+        });
+        response.on('end', function() {
+          ret = JSON.parse(body);
+          var temp = ret.response[0].ob.tempF;
+          var weather = ret.response[0].ob.weatherShort;
+          
+          bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + '.');
+        });
+      });
+    });
+  });
+});
 
 controller.hears('debug','direct_message',function(bot, message) {
   bot.api.chat.postMessage({ channel:'C0HG8KG4D', text:'ohhh yeah'},function(err,response) {
