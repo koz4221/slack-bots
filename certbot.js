@@ -36,7 +36,7 @@ var bot = controller.spawn(
   }
 ).startRTM();
 
-var aerisString = '&client_id=' + process.env.aerisID + '&client_secret=' + process.env.aerisSecret
+var aerisString = '&client_id=' + process.env.AERIS_ID + '&client_secret=' + process.env.AERIS_SECRET;
 
 var booActivePoll = false;
 var options, pollChannel, pollUser;
