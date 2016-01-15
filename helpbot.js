@@ -63,6 +63,7 @@ This bot demonstrates many of the core features of Botkit:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+/* Making a trivial change because github is being dumb */
 
 if (!process.env.token) {
     console.log('Error: Specify token in environment');
