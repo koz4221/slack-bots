@@ -37,10 +37,19 @@ var bot = controller.spawn(
 ).startRTM();
 
 var aerisString = '&client_id=' + process.env.AERIS_ID + '&client_secret=' + process.env.AERIS_SECRET;
+var weekday = new Array(7);
+    weekday[0]=  "Sunday";
+    weekday[1] = "Monday";
+    weekday[2] = "Tuesday";
+    weekday[3] = "Wednesday";
+    weekday[4] = "Thursday";
+    weekday[5] = "Friday";
+    weekday[6] = "Saturday";
 
 var booActivePoll = false;
 var options, pollChannel, pollUser;
 var results, resultsUsers = [];
+var advisoryCode = '';
 
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot,message) {
   bot.reply(message,"Hello!");
@@ -141,14 +150,20 @@ function pollResults(message) {
 
 controller.hears('weather','direct_message,direct_mention',function(bot,message) {
   var search;
+  var booForecast = false;
   var query = message.text.replace(/weather\s*/i,'');
+  
+  if (query.match(/^forecast.*/i) != null) {
+    query = query.replace(/^forecast\s*/i,'');
+    booForecast = true;
+  }
+
   if (query.length > 0) {
     search = query;
   }
   else {
     search = '04101';
   }
-  console.log(search);
   http.get('http://api.aerisapi.com/places/closest?p=' + search + aerisString, function(response,err) {
     if (err) { console.log(err); }
     // Continuously update stream with data
@@ -170,7 +185,7 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
         
         // now actual weather lookup
         http.get('http://api.aerisapi.com/observations/closest?p=' + search + aerisString, function(response,err) {
-         body = '';
+          body = '';
           response.on('data', function(d) {
             body += d;
           });
@@ -182,14 +197,82 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
             var windMPH = ret.response[0].ob.windSpeedMPH;
             var feelsLike = ret.response[0].ob.feelslikeF;
             
-            bot.reply(message, 'Weather for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + 
-              '. Wind is ' + windDir + ' at ' + windMPH + ' MPH and it feels like ' + feelsLike + '\xB0' + 'F.');
+            var reply = 'Current conditions for ' + location + ': ' + temp + '\xB0' + 'F and ' + weather + 
+              '. Wind is ' + windDir + ' at ' + windMPH + ' MPH and it feels like ' + feelsLike + '\xB0' + 'F.';
+            
+            // do forecast if needed
+            if (booForecast == true) {
+              http.get('http://api.aerisapi.com/forecasts/closest?p=' + search + '&filter=daynight&limit=10' + aerisString, function(response,err) {
+                body = '';
+                response.on('data', function(d) {
+                  body += d;
+                });
+                response.on('end', function() {
+                  ret = JSON.parse(body);
+                  var i = 0;
+                  
+                  // check to see if periods start with current night and adjust
+                  if (ret.response[0].periods[0].isDay == false) {
+                    reply += '\n' + 'Tonight: Low of ' + ret.response[0].periods[0].minTempF + '\xB0' + 'F, ' + ret.response[0].periods[0].weather.toLowerCase();
+                    i = 1;
+                  }
+                  
+                  // length - 1 so we don't include final day part if i = 1 from above.
+                  for (; i < ret.response[0].periods.length - 1; i += 2) {
+                    var dayPeriod = ret.response[0].periods[i];
+                    var nightPeriod = ret.response[0].periods[i+1];
+                    var date = new Date(dayPeriod.dateTimeISO);
+                    var maxTemp = dayPeriod.maxTempF;
+                    var minTemp = nightPeriod.minTempF;
+                    var dayWeather = dayPeriod.weather.toLowerCase();
+                    var nightWeather = nightPeriod.weather.toLowerCase();
+                    
+                    reply += '\n' + weekday[date.getDay()] + ': High of ' + maxTemp + '\xB0' + 'F, low of ' + minTemp + '\xB0' + 'F. ';
+                    
+                    if (dayWeather == nightWeather) {
+                      reply += dayWeather.substr(0,1).toUpperCase() + dayWeather.substr(1) + '.';
+                    }
+                    else {
+                      reply += dayWeather.substr(0,1).toUpperCase() + dayWeather.substr(1) + ', then ' + nightWeather + '.';
+                    }
+                  }
+                  bot.reply(message,reply);
+                });
+              });
+            }
+            else {
+              bot.reply(message,reply);
+            }
           });
         });
       }
     });
   });
 });
+
+function getAdvisory(location) {
+  http.get('http://api.aerisapi.com/forecasts/closest?p=' + location + aerisString, function(response,err) {
+    var body = '';
+    response.on('data', function(d) {
+      body += d;
+    });
+    response.on('end', function() {    
+      var ret = JSON.parse(body);
+      if (ret.error !== undefined) {
+        advisoryCode = '';
+        return ret.error.code;
+      }
+      else {
+        if (ret.response[0].details.type == advisoryCode) {
+          return 'unchanged';
+        }
+        
+        advisoryCode = ret.response[0].details.type;
+        return ret.response[0];
+      }
+    });
+  });
+}
 
 controller.hears('debug','direct_message',function(bot, message) {
   bot.api.chat.postMessage({ channel:'C0HG8KG4D', text:'ohhh yeah'},function(err,response) {
