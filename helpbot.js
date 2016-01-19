@@ -3,137 +3,130 @@ if (!process.env.token) {
     process.exit(1);
 }
 
-var Botkit = require('lib/Botkit.js');
+var Botkit = require('../lib/Botkit.js');
+var BotStorage = require('./storage.js');
+
 var os = require('os');
 
 var controller = Botkit.slackbot({
     //debug: true,
 });
 
-var bot = controller.spawn({
+var helpbot = controller.spawn({
     token: process.env.token
 }).startRTM();
 
-var Storage = {
-  users: {}
-};
+var BotFunctions = require('./functions.js');
 
-function updateStorage() {
-  bot.api.users.list({},function(err,json){
-    Storage.users = json.members;
+
+helpbot.storage = BotStorage(helpbot);
+helpbot.options = [
+  ["get started"]
+];
+
+// add helper functions to global scope
+require('./functions.js')(helpbot);
+
+controller.hears(['update storage'],'direct_message',function(bot,message) {
+  helpbot.storage.update();
+});
+
+var helpOptions = [
+  {
+    keys:['get started', 'getstarted', 'onboard'],
+    response: function(user){
+      return user.profile.first_name + ' I\'m here to help! I... don\'t actually do anything yet though.';
+    }
+  }
+];
+
+function isHelpOption(str){
+  return helpOptions.filter(function(option,i){
+    return option.keys.indexOf(str) > -1;
   });
 }
 
+function getResponse(str){
+  var option = isHelpOption(str);
 
-var buildGetUser = function(prop) {
-  return function(val) {
-    return Storage.users.filter(function(user,i){
-      if (user[prop] == val){
-        console.log('found');
-        console.log('user');
-        return user;
-      }
-    })[0];
-  };
-};
+  return option.length ? option[0].response : false;
 
-var getUserById = buildGetUser('id');
-// name here means their slack name e.g. "mike"
-var getUserByName = buildGetUser('name');
-
-var parseName = function(fullmsg) {
-  // strip command
-  var msg = '';
-  fullmsg.toString();
-  msg = fullmsg.substr(fullmsg.indexOf(' ') + 1);
-  msg = msg.indexOf(' ') > -1 ? msg.substr(0, ' ') : msg;
-  if (msg == 'me' || msg.indexOf('@') < 0) {
-    return msg;
-  } else {
-    // strip angle brackets and @ from user name
-    msg = msg.substr(2);
-    msg = msg.substr(0, msg.length -1);
-
-    return msg;
-  }
-
-};
-
-function getRandomArrayValue(arr) {
-  var index = Math.floor( Math.random() * (arr.length) );
-  console.log(index);
-  return arr[index];
 }
 
-var insults = [
-  'you are a ninny.',
-  'you\'re tacky and I hate you.',
-  'you have a very punchable face.',
-  'your presence offends me.',
-  'you smell like farts.',
-  'I was having a great day until I saw your face.',
-  'you\'re about as sharp as a bowling ball.',
-  'I bet you won most likely to drink out of the toilet in your high school class',
-  'you are the worst',
-  'I hear the only place you\'re ever invited is outside.',
-  'you strike me as a bed wetter.',
-  'you have the IQ of a baked potato'
-];
-var compliments = [
-  'you have great hair.',
-  'you\'re beautiful. Never change.',
-  'you have impeccable manners',
-  'on a scale of 1 to 10, you are an 11',
-  'you bring out the best in other people.',
-  'everything would be better if more people were like you!',
-  'you\'re a candle in the darkness.',
-  'you\'re more fun than bubble wrap.',
-  'you\'re really something special.',
-  'you have all of the qualities I am looking for in a human host.',
-  'you light up any room you\re in',
-  'I think you could be president some day.'
-];
 
-updateStorage();
 
-controller.hears(['update storage'],'direct_message',function(bot,message) {
-  updateStorage();
+controller.hears(['help'],'direct_message,direct_mention,mention',function(bot,message) {
+
+  var recipient;
+  // figure out who to direct help to.
+  var response;
+
+  var nextCommand = message.text.getNextWord('help');
+
+  if ( nextCommand == 'me') {
+
+    recipient = getUserById(message.user);
+
+  } else if ( isUser( parseName( nextCommand ) ) ) {
+    recipient = getUserById( parseName( nextCommand ) );
+  } else if ( isHelpOption(nextCommand) ) {
+    response = getResponse(nextCommand);
+  } else {
+    // invalid command
+    return false;
+  }
+
+  // if we have a user but no response, attempt to interpret remainder of string as requested response
+  response = response || getResponse( message.text.split('help ' + nextCommand + ' ')[1] );
+  
+  if (!response) {
+    // Invalid command if we still don't have a response
+    bot.reply( message, 'You did not specify a response -- list available responses' );
+    return;
+  }
+
+  bot.reply( message, response(recipient) );
 });
 
 controller.hears(['insult'],'direct_message,direct_mention,mention',function(bot,message) {
 
-  var recipient;
-  var person = parseName(message.text);
-  console.log(person);
-  if (person == 'me') {
+  var recipient = parseName( message.text.getNextWord('insult') );
+  console.log(recipient);
+  if (recipient == 'me') {
     recipient = getUserById(message.user).profile.first_name;
-  } else if ( person ) {
-    recipient = getUserById(person).profile.first_name;
+  } else if ( getUserById(recipient) ) {
+    // to do: fix this to correct direct typed @usernames
+    recipient = getUserById(recipient).profile.first_name;
+  } else if (recipient){
+    recipient = message.text.split('insult ')[1];
   } else {
-    recipient = person;
+    // must specify recipient
+    return;
   }
 
-  bot.reply(message, recipient + ' ' + getRandomArrayValue(insults));
+  bot.reply(message, recipient + ' ' + getRandomArrayValue(helpbot.storage.insults));
 });
+
+
 controller.hears(['compliment'],'direct_message,direct_mention,mention',function(bot,message) {
   
-  var recipient;
-  var person = parseName(message.text);
-  console.log(person);
-  if (person == 'me') {
+  var recipient = parseName( message.text.getNextWord('compliment') );
+
+  if (recipient == 'me') {
     recipient = getUserById(message.user).profile.first_name;
-  } else if ( person ) {
-    recipient = getUserById(person).profile.first_name;
+  } else if ( getUserById(recipient) ) {
+    // to do: fix this to correct direct typed @usernames
+    recipient = getUserById(recipient).profile.first_name;
+  } else if (recipient){
+    recipient = message.text.split('compliment ')[1];
   } else {
-    recipient = person;
+    // must specify recipient
+    return;
   }
 
-  bot.reply(message, recipient + ' ' + getRandomArrayValue(compliments));
+  bot.reply(message, recipient + ' ' + getRandomArrayValue(helpbot.storage.compliments));
 });
-controller.hears(['my info'],'direct_message,direct_mention,mention',function(bot,message) {
-  var person = Storage.users[message.user];
-  bot.reply(message, 'Your name is ' + person.first_name + ' ' + person.last_name + ', your slack username is ' + person.name + ' and your account email is ' + person.email );
-});
+
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot, message) {
     bot.api.reactions.add({
         timestamp: message.ts,
@@ -145,25 +138,12 @@ controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function
         }
     });
 
-    controller.storage.users.get(message.user,function(err, user) {
-        if (user && user.name) {
-            bot.reply(message,'Hello ' + user.name + '!!');
-        } else {
-            bot.reply(message,message);
-        }
-    });
+    var recipient = getUserById(message.user).profile.first_name;
+    
+    bot.reply(message,'Hello ' + recipient + '!!');
+
 });
 
-controller.hears(['what is my name','who am i'],'direct_message,direct_mention,mention',function(bot, message) {
-
-    controller.storage.users.get(message.user,function(err, user) {
-        if (user && user.name) {
-            bot.reply(message,'Your name is ' + user.name);
-        } else {
-            bot.reply(message,'I don\'t know yet!');
-        }
-    });
-});
 
 controller.hears(['shutdown'],'direct_message,direct_mention,mention',function(bot, message) {
 
@@ -190,5 +170,4 @@ controller.hears(['shutdown'],'direct_message,direct_mention,mention',function(b
         ]);
     });
 });
-Status API Training Shop Blog About Pricing
-© 2016 GitHub, Inc. Terms Privacy Security Contact Help
+
