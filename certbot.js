@@ -51,6 +51,17 @@ var options, pollChannel, pollUser;
 var results, resultsUsers = [];
 var advisoryCode = '';
 
+setInterval(function() {
+  getAdvisory('04101', function(resp) {
+    if (resp != 'warn_no_data' && resp != 'unchanged') {
+      var msg = 'Attention! There is a ' + resp.name + ' for your area:' + '\n\n' + resp.body;
+      bot.api.chat.postMessage({ channel:'#bottest', text: msg, as_user: true},function(err,response) {
+        if (err) { console.log(err); }
+      });      
+    }
+  });
+}, 300000);
+
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot,message) {
   bot.reply(message,"Hello!");
 });
@@ -250,25 +261,36 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
   });
 });
 
-function getAdvisory(location) {
-  http.get('http://api.aerisapi.com/forecasts/closest?p=' + location + aerisString, function(response,err) {
+controller.hears('advisory','direct_message',function(bot,message) {
+  getAdvisory('fairfax,va', function(resp) {
+    //bot.reply(message,resp);
+    bot.api.chat.postMessage({ channel:'#bottest', text: resp, as_user: true},function(err,response) {
+      if (err) { console.log(err); }
+    });
+  });
+});
+
+function getAdvisory(location, callback) {
+  http.get('http://api.aerisapi.com/advisories/closest?p=' + location + aerisString, function(response,err) {
     var body = '';
     response.on('data', function(d) {
       body += d;
     });
     response.on('end', function() {    
       var ret = JSON.parse(body);
-      if (ret.error !== undefined) {
+      if (ret.error != null) {
         advisoryCode = '';
-        return ret.error.code;
+        'error will be "warn_no_data" if no advisories'
+        callback(ret.error.code);
       }
       else {
         if (ret.response[0].details.type == advisoryCode) {
-          return 'unchanged';
+          callback('unchanged');
         }
-        
-        advisoryCode = ret.response[0].details.type;
-        return ret.response[0];
+        else {
+          advisoryCode = ret.response[0].details.type;
+          callback(ret.response[0].details);          
+        }
       }
     });
   });
@@ -282,5 +304,10 @@ controller.hears('debug','direct_message',function(bot, message) {
   bot.api.channels.info({ channel:'C0H8K3WES' },function(err,response) {
     if (err) { console.log(err); }
     //console.log(response);
+  });
+  
+  bot.api.channels.list({},function(err,response) {
+    if (err) { console.log(err); }
+    console.log(response);
   });
 });
