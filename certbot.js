@@ -1,27 +1,3 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-          ______     ______     ______   __  __     __     ______
-          /\  == \   /\  __ \   /\__  _\ /\ \/ /    /\ \   /\__  _\
-          \ \  __<   \ \ \/\ \  \/_/\ \/ \ \  _"-.  \ \ \  \/_/\ \/
-          \ \_____\  \ \_____\    \ \_\  \ \_\ \_\  \ \_\    \ \_\
-           \/_____/   \/_____/     \/_/   \/_/\/_/   \/_/     \/_/
-
-
-This is a sample Slack bot built with Botkit.
-
-# RUN THE BOT:
-
-  Get a Bot token from Slack:
-
-    -> http://my.slack.com/services/new/bot
-
-  Run your bot from the command line:
-
-    token=<MY TOKEN> node bot.js
-
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
-
 var Botkit = require('./lib/Botkit.js');
 var os = require('os');
 var http = require('http');
@@ -50,17 +26,37 @@ var booActivePoll = false;
 var options, pollChannel, pollUser;
 var results, resultsUsers = [];
 var advisoryCode = '';
+var advisoryTime;
 
 setInterval(function() {
-  getAdvisory('04101', function(resp) {
+  getAdvisory('04101', false, function(resp) {
     if (resp != 'warn_no_data' && resp != 'unchanged') {
-      var msg = 'Attention! There is a ' + resp.name + ' for your area:' + '\n\n' + resp.body;
-      bot.api.chat.postMessage({ channel:'#bottest', text: msg, as_user: true},function(err,response) {
-        if (err) { console.log(err); }
-      });      
+      var msg = 'Attention! There is a ' + resp.name + ' for Portland!';
+      bot.api.chat.postMessage({
+        text: msg,
+        channel: "#bottest",
+        as_user: true,
+        attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
+      }, function(resp) {
+        //console.log(resp);
+      });
     }
   });
-}, 300000);
+  
+  getAdvisory('92101', false, function(resp) {
+    if (resp != 'warn_no_data' && resp != 'unchanged') {
+      var msg = 'Attention! There is a ' + resp.name + ' for San Diego!';
+      bot.api.chat.postMessage({
+        text: msg,
+        channel: "#bottest",
+        as_user: true,
+        attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
+      }, function(resp) {
+        //console.log(resp);
+      });
+    }
+  });
+}, 900000);
 
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot,message) {
   bot.reply(message,"Hello!");
@@ -164,44 +160,55 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
   var booForecast = false;
   var query = message.text.replace(/weather\s*/i,'');
   
-  if (query.match(/^forecast.*/i) != null) {
-    query = query.replace(/^forecast\s*/i,'');
-    booForecast = true;
-  }
-
-  if (query.length > 0) {
-    search = query;
-  }
-  else {
-    search = '04101';
-  }
-  http.get('http://api.aerisapi.com/places/closest?p=' + search + aerisString, function(response,err) {
-    if (err) { console.log(err); }
-    // Continuously update stream with data
-    var body = '';
-    response.on('data', function(d) {
-      body += d;
-    });
-    response.on('end', function() {
-      var ret = JSON.parse(body);
-      if (ret.success == false) {
-        bot.reply(message,'Error accessing data: ' + ret.error.description);
+  if (query.match(/^advisory.*/i) != null) {
+    query = query.replace(/^advisory\s*/i,'');
+    if (query.length > 0) {
+      search = query;
+    }
+    else {
+      search = '04101';
+    }
+    
+    getAdvisory(search, true, function(resp) {
+      if (resp == 'warn_no_data') {
+        bot.reply(message,'There are no weather advisories for that area. Phew!');
+      }
+      else if (resp.body == undefined) {
+        bot.reply(message,'Sorry, I can\'t find that location!');
       }
       else {
-        var place = ret.response[0].place.name;
-        var state = ret.response[0].place.state;
-        var country = ret.response[0].place.country;
-        
-        var location = place + ' ' + ((state != '') ? state : country);
-        
-        // now actual weather lookup
-        http.get('http://api.aerisapi.com/observations/closest?p=' + search + aerisString, function(response,err) {
-          body = '';
-          response.on('data', function(d) {
-            body += d;
-          });
-          response.on('end', function() {
-            ret = JSON.parse(body);
+        bot.reply(message, resp.body);
+      }
+    });     
+  }
+  // no specific command, get current weather or forecast
+  else {
+    if (query.match(/^forecast.*/i) != null) {
+      query = query.replace(/^forecast\s*/i,'');
+      booForecast = true;
+    }
+  
+    if (query.length > 0) {
+      search = query;
+    }
+    else {
+      search = '04101';
+    }
+    
+    getPlaceName(search, function(location) {
+      // now actual weather lookup
+      http.get('http://api.aerisapi.com/observations/closest?p=' + search + aerisString, function(response,err) {
+        var body = '';
+        response.on('data', function(d) {
+          body += d;
+        });
+        response.on('end', function() {
+          var ret = JSON.parse(body);
+          
+          if (ret.success == false) {
+            bot.reply(message,'Sorry, I can\'t find that location!');
+          }
+          else {
             var temp = ret.response[0].ob.tempF;
             var weather = ret.response[0].ob.weatherShort;
             var windDir = ret.response[0].ob.windDir;
@@ -253,24 +260,33 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
             }
             else {
               bot.reply(message,reply);
-            }
-          });
+            } 
+          }
         });
-      }
+      });      
     });
-  });
+  }
 });
 
-controller.hears('advisory','direct_message',function(bot,message) {
-  getAdvisory('fairfax,va', function(resp) {
-    //bot.reply(message,resp);
-    bot.api.chat.postMessage({ channel:'#bottest', text: resp, as_user: true},function(err,response) {
-      if (err) { console.log(err); }
-    });
-  });
-});
+// controller.hears('advisory','direct_message',function(bot,message) {
+//   getAdvisory('holland,mi', true, function(resp) {
+//     //console.log(message);
+//     // message.channel = '#bottest';
+//     // bot.reply(message,{
+//     //   text: 'yo text',
+//     //   attachments: [{fallback: 'fallback text', text: 'attach text'}]
+//     // });
+//     bot.api.chat.postMessage({
+//       text: "yo yo",
+//       channel: "#bottest",
+//       attachments: '[{"fallback":"fallback text","text":"attach text"}]'
+//     }, function(resp) {
+//       console.log(resp);
+//     });
+//   });
+// });
 
-function getAdvisory(location, callback) {
+function getAdvisory(location, getUnchanged, callback) {
   http.get('http://api.aerisapi.com/advisories/closest?p=' + location + aerisString, function(response,err) {
     var body = '';
     response.on('data', function(d) {
@@ -280,15 +296,18 @@ function getAdvisory(location, callback) {
       var ret = JSON.parse(body);
       if (ret.error != null) {
         advisoryCode = '';
-        'error will be "warn_no_data" if no advisories'
+        advisoryTime = new Date();
+        //error will be "warn_no_data" if no advisories
         callback(ret.error.code);
       }
       else {
-        if (ret.response[0].details.type == advisoryCode) {
+        // 43200000 milliseconds = 12 hours
+        if (ret.response[0].details.type == advisoryCode && getUnchanged == false && (Date.now() - advisoryTime < 43200000)) {
           callback('unchanged');
         }
         else {
           advisoryCode = ret.response[0].details.type;
+          advisoryTime = new Date();
           callback(ret.response[0].details);          
         }
       }
@@ -296,18 +315,46 @@ function getAdvisory(location, callback) {
   });
 }
 
+function getPlaceName(search, callback) {
+  http.get('http://api.aerisapi.com/places/closest?p=' + search + aerisString, function(response,err) {
+    if (err) { console.log(err); }
+    // Continuously update stream with data
+    var body = '';
+    response.on('data', function(d) {
+      body += d;
+    });
+    response.on('end', function() {
+      var ret = JSON.parse(body);
+      if (ret.success == false) {
+        callback('Unknown Location');
+      }
+      else {
+        var place = ret.response[0].place.name;
+        var state = ret.response[0].place.state;
+        var country = ret.response[0].place.country;
+        
+        var location = place + ' ' + ((state != '') ? state : country);
+        callback(location);
+      }
+    });
+  });
+}
+
 controller.hears('debug','direct_message',function(bot, message) {
-  bot.api.chat.postMessage({ channel:'C0HG8KG4D', text:'ohhh yeah'},function(err,response) {
+  //console.log(new Date(Date.now()).toUTCString());
+  //bot.reply(message,Date.now - 43200000);
+  
+  bot.api.chat.postMessage({ channel:'innercircle', text:'test'},function(err,response) {
     if (err) { console.log(err); }
   });
 
-  bot.api.channels.info({ channel:'C0H8K3WES' },function(err,response) {
-    if (err) { console.log(err); }
-    //console.log(response);
-  });
+  // bot.api.channels.info({ channel:'C0H8K3WES' },function(err,response) {
+  //   if (err) { console.log(err); }
+  //   //console.log(response);
+  // });
   
-  bot.api.channels.list({},function(err,response) {
-    if (err) { console.log(err); }
-    console.log(response);
-  });
+  // bot.api.channels.list({},function(err,response) {
+  //   if (err) { console.log(err); }
+  //   console.log(response);
+  // });
 });
