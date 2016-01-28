@@ -25,35 +25,43 @@ var weekday = new Array(7);
 var booActivePoll = false;
 var options, pollChannel, pollUser;
 var results, resultsUsers = [];
-var advisoryCode = '';
-var advisoryTime;
+var advisoryCode_PORT = '';
+var advisoryTime_PORT = new Date();
+var advisoryCode_SD = '';
+var advisoryTime_SD = new Date();
 
 setInterval(function() {
   getAdvisory('04101', false, function(resp) {
-    if (resp != 'warn_no_data' && resp != 'unchanged') {
-      var msg = 'Attention! There is a ' + resp.name + ' for Portland!';
-      bot.api.chat.postMessage({
-        text: msg,
-        channel: "#bottest",
-        as_user: true,
-        attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
-      }, function(resp) {
-        //console.log(resp);
-      });
+    if (resp != 'warn_no_data' && resp.type != undefined) {
+      if (resp.type != advisoryCode_PORT || (Date.now() - advisoryTime_PORT >= 43200000)) {
+        var msg = 'Attention! There is a ' + resp.name + ' for Portland!';
+        bot.api.chat.postMessage({
+          text: msg,
+          channel: "#bottest",
+          as_user: true,
+          attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
+        }, function(response) {
+          advisoryCode_PORT = resp.type;
+          advisoryTime_PORT = new Date();
+        });        
+      }
     }
   });
   
   getAdvisory('92101', false, function(resp) {
-    if (resp != 'warn_no_data' && resp != 'unchanged') {
-      var msg = 'Attention! There is a ' + resp.name + ' for San Diego!';
-      bot.api.chat.postMessage({
-        text: msg,
-        channel: "#bottest",
-        as_user: true,
-        attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
-      }, function(resp) {
-        //console.log(resp);
-      });
+    if (resp != 'warn_no_data' && resp.type != undefined) {
+      if (resp.type != advisoryCode_SD || (Date.now() - advisoryTime_SD >= 43200000)) {
+        var msg = 'Attention! There is a ' + resp.name + ' for San Diego!';
+        bot.api.chat.postMessage({
+          text: msg,
+          channel: "#bottest",
+          as_user: true,
+          attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
+        }, function(response) {
+          advisoryCode_SD = resp.type;
+          advisoryTime_SD = new Date();
+        });
+      }
     }
   });
 }, 900000);
@@ -301,15 +309,19 @@ function getAdvisory(location, getUnchanged, callback) {
         callback(ret.error.code);
       }
       else {
-        // 43200000 milliseconds = 12 hours
-        if (ret.response[0].details.type == advisoryCode && getUnchanged == false && (Date.now() - advisoryTime < 43200000)) {
-          callback('unchanged');
-        }
-        else {
-          advisoryCode = ret.response[0].details.type;
-          advisoryTime = new Date();
-          callback(ret.response[0].details);          
-        }
+        callback(ret.response[0].details);   
+        
+        // // 43200000 milliseconds = 12 hours
+        // console.log(Date.now() - advisoryTime,ret.response[0].details.type,advisoryCode,getUnchanged);
+        // if (ret.response[0].details.type == advisoryCode && getUnchanged == false && ((Date.now() - advisoryTime) < 43200000)) {
+        //   callback('unchanged');
+        // }
+        // else {
+        //   advisoryCode = ret.response[0].details.type;
+        //   console.log(advisoryCode);
+        //   advisoryTime = new Date();
+        //   callback(ret.response[0].details);          
+        // }
       }
     });
   });
