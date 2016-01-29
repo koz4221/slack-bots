@@ -31,13 +31,13 @@ var advisoryCode_SD = '';
 var advisoryTime_SD = new Date();
 
 setInterval(function() {
-  getAdvisory('04101', false, function(resp) {
+  getAdvisory('04101', function(resp) {
     if (resp != 'warn_no_data' && resp.type != undefined) {
       if (resp.type != advisoryCode_PORT || (Date.now() - advisoryTime_PORT >= 43200000)) {
         var msg = 'Attention! There is a ' + resp.name + ' for Portland!';
         bot.api.chat.postMessage({
           text: msg,
-          channel: "#bottest",
+          channel: "#general-work",
           as_user: true,
           attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
         }, function(response) {
@@ -48,13 +48,13 @@ setInterval(function() {
     }
   });
   
-  getAdvisory('92101', false, function(resp) {
+  getAdvisory('92101', function(resp) {
     if (resp != 'warn_no_data' && resp.type != undefined) {
       if (resp.type != advisoryCode_SD || (Date.now() - advisoryTime_SD >= 43200000)) {
         var msg = 'Attention! There is a ' + resp.name + ' for San Diego!';
         bot.api.chat.postMessage({
           text: msg,
-          channel: "#bottest",
+          channel: "#general-work",
           as_user: true,
           attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
         }, function(response) {
@@ -177,7 +177,7 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
       search = '04101';
     }
     
-    getAdvisory(search, true, function(resp) {
+    getAdvisory(search, function(resp) {
       if (resp == 'warn_no_data') {
         bot.reply(message,'There are no weather advisories for that area. Phew!');
       }
@@ -276,25 +276,30 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
   }
 });
 
-// controller.hears('advisory','direct_message',function(bot,message) {
-//   getAdvisory('holland,mi', true, function(resp) {
-//     //console.log(message);
-//     // message.channel = '#bottest';
-//     // bot.reply(message,{
-//     //   text: 'yo text',
-//     //   attachments: [{fallback: 'fallback text', text: 'attach text'}]
-//     // });
-//     bot.api.chat.postMessage({
-//       text: "yo yo",
-//       channel: "#bottest",
-//       attachments: '[{"fallback":"fallback text","text":"attach text"}]'
-//     }, function(resp) {
-//       console.log(resp);
-//     });
-//   });
-// });
+controller.hears('haunt','direct_message',function(bot, message) {
+  if (message.user == 'U0H8JU16W') {
+    var chan = message.text.replace(/^haunt\s*/i,'');
+    bot.startConversation(message,function(err, convo) {
+      if (err) { convo.say(err); }
+      else {
+        convo.ask("Now haunting channel " + chan + ". Commence talking.", function(response, convo) {
+          bot.api.chat.postMessage({
+            text: response.text,
+            channel: chan,
+            as_user: true
+          }, function(response) {
+            convo.say(response);
+          });
+          
+          convo.next();
+        });
+      }
+    });
+    
+  }
+});
 
-function getAdvisory(location, getUnchanged, callback) {
+function getAdvisory(location, callback) {
   http.get('http://api.aerisapi.com/advisories/closest?p=' + location + aerisString, function(response,err) {
     var body = '';
     response.on('data', function(d) {
@@ -303,8 +308,6 @@ function getAdvisory(location, getUnchanged, callback) {
     response.on('end', function() {    
       var ret = JSON.parse(body);
       if (ret.error != null) {
-        advisoryCode = '';
-        advisoryTime = new Date();
         //error will be "warn_no_data" if no advisories
         callback(ret.error.code);
       }
