@@ -44,7 +44,7 @@ var BotStorage = function(bot) {
   function storeChannels() {
     bot.api.channels.list({},function(err,json){
       if (err) { console.log(err); }
-      botstorage.channels = json.members;
+      botstorage.channels = json.channels;
     });
   }
 
@@ -52,6 +52,14 @@ var BotStorage = function(bot) {
     storeUsers();
     storeChannels();
   };
+  
+  botstorage.getChannel = function(chan, cb) {
+    for(var i = 0; i < botstorage.channels.length; i++) {
+      if (botstorage.channels[i].name == chan) {
+        cb(botstorage.channels[i].id);
+      }
+    }
+  }
 
   // init storage
   storeUsers();

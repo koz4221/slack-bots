@@ -1,5 +1,6 @@
 var Botkit = require('./lib/Botkit.js');
-var os = require('os');
+var BotStorage = require('./storage.js');
+
 var http = require('http');
 
 var controller = Botkit.slackbot({
@@ -25,46 +26,50 @@ var weekday = new Array(7);
 var booActivePoll = false;
 var options, pollChannel, pollUser;
 var results, resultsUsers = [];
-var advisoryCode_PORT = '';
-var advisoryTime_PORT = new Date();
-var advisoryCode_SD = '';
-var advisoryTime_SD = new Date();
+// var advisoryCode_PORT = '';git 
+// var advisoryTime_PORT = new Date();
+// var advisoryCode_SD = '';
+// var advisoryTime_SD = new Date();
 
-setInterval(function() {
-  getAdvisory('04101', function(resp) {
-    if (resp != 'warn_no_data' && resp.type != undefined) {
-      if (resp.type != advisoryCode_PORT || (Date.now() - advisoryTime_PORT >= 43200000)) {
-        var msg = 'Attention! There is a ' + resp.name + ' for Portland!';
-        bot.api.chat.postMessage({
-          text: msg,
-          channel: "#general-work",
-          as_user: true,
-          attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
-        }, function(response) {
-          advisoryCode_PORT = resp.type;
-          advisoryTime_PORT = new Date();
-        });        
-      }
-    }
-  });
+bot.storage = BotStorage(bot);
+
+// setInterval(function() {
+//   getAdvisory('04101', function(resp) {
+//     if (resp != 'warn_no_data' && resp.type != undefined) {
+//       if (resp.type != advisoryCode_PORT || (Date.now() - advisoryTime_PORT >= 43200000)) {
+//         var msg = 'Attention! There is a ' + resp.name + ' for Portland!';
+//         bot.api.chat.postMessage({
+//           text: msg,
+//           channel: "#general-work",
+//           as_user: true,
+//           attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
+//         }, function(response) {
+//           //console.log(response);
+//           advisoryCode_PORT = resp.type;
+//           advisoryTime_PORT = new Date();
+//         });        
+//       }
+//     }
+//   });
   
-  getAdvisory('92101', function(resp) {
-    if (resp != 'warn_no_data' && resp.type != undefined) {
-      if (resp.type != advisoryCode_SD || (Date.now() - advisoryTime_SD >= 43200000)) {
-        var msg = 'Attention! There is a ' + resp.name + ' for San Diego!';
-        bot.api.chat.postMessage({
-          text: msg,
-          channel: "#general-work",
-          as_user: true,
-          attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
-        }, function(response) {
-          advisoryCode_SD = resp.type;
-          advisoryTime_SD = new Date();
-        });
-      }
-    }
-  });
-}, 900000);
+//   getAdvisory('92101', function(resp) {
+//     if (resp != 'warn_no_data' && resp.type != undefined) {
+//       if (resp.type != advisoryCode_SD || (Date.now() - advisoryTime_SD >= 43200000)) {
+//         var msg = 'Attention! There is a ' + resp.name + ' for San Diego!';
+//         bot.api.chat.postMessage({
+//           text: msg,
+//           channel: "#general-work",
+//           as_user: true,
+//           attachments: '[{"fallback":"fallback text","text":"' + resp.body + '"}]'
+//         }, function(response) {
+//           //console.log(response);
+//           advisoryCode_SD = resp.type;
+//           advisoryTime_SD = new Date();
+//         });
+//       }
+//     }
+//   });
+// }, 900000);
 
 controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot,message) {
   bot.reply(message,"Hello!");
@@ -278,24 +283,37 @@ controller.hears('weather','direct_message,direct_mention',function(bot,message)
 
 controller.hears('haunt','direct_message',function(bot, message) {
   if (message.user == 'U0H8JU16W') {
-    var chan = message.text.replace(/^haunt\s*/i,'');
-    bot.startConversation(message,function(err, convo) {
-      if (err) { convo.say(err); }
-      else {
-        convo.ask("Now haunting channel " + chan + ". Commence talking.", function(response, convo) {
-          bot.api.chat.postMessage({
-            text: response.text,
-            channel: chan,
-            as_user: true
-          }, function(response) {
-            convo.say(response);
-          });
-          
-          convo.next();
-        });
-      }
+    var channelName = message.text.replace(/^haunt\s*/i,'');
+    bot.storage.getChannel(channelName, function(id) {
+      bot.startConversation(message,function(err, convo) {
+        if (err) { convo.say(err); }
+        else {
+          convo.ask("Now haunting channel " + channelName + ". Commence talking.", [
+          {
+            pattern: 'stop',
+            callback: function(response,convo) {
+              convo.say('Haunting stopped.');
+              convo.next();
+            }
+          },
+          {
+            default: true,
+            callback: function(response, convo) {
+              bot.api.chat.postMessage({
+                text: response.text,
+                channel: id,
+                as_user: true
+              }, function(response) {
+                //convo.say(response);
+              });
+              
+              convo.silentRepeat();
+            }
+          }
+          ]);
+        }
+      });     
     });
-    
   }
 });
 
@@ -356,20 +374,24 @@ function getPlaceName(search, callback) {
 }
 
 controller.hears('debug','direct_message',function(bot, message) {
+  bot.storage.getChannel('bottest', function(id) {
+    console.log(id); 
+  });
+  
   //console.log(new Date(Date.now()).toUTCString());
   //bot.reply(message,Date.now - 43200000);
   
-  bot.api.chat.postMessage({ channel:'innercircle', text:'test'},function(err,response) {
-    if (err) { console.log(err); }
-  });
+  // bot.api.chat.postMessage({ channel:'#general-work', text:'test'},function(err,response) {
+  //   if (err) { console.log(err); }
+  // });
 
   // bot.api.channels.info({ channel:'C0H8K3WES' },function(err,response) {
   //   if (err) { console.log(err); }
-  //   //console.log(response);
+  //   console.log(response);
   // });
   
   // bot.api.channels.list({},function(err,response) {
   //   if (err) { console.log(err); }
-  //   console.log(response);
+  //   console.log(response.channels.members);
   // });
 });
